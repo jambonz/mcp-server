@@ -1,0 +1,58 @@
+{
+  "name": "@jambonz/mcp-schema-server",
+  "version": "0.2.0",
+  "description": "MCP server that provides jambonz verb schemas and documentation to AI agents",
+  "author": "Dave Horton",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jambonz/mcp-server.git"
+  },
+  "homepage": "https://github.com/jambonz/mcp-server#readme",
+  "keywords": [
+    "jambonz",
+    "mcp",
+    "model-context-protocol",
+    "schema",
+    "voip",
+    "ai-agent"
+  ],
+  "type": "module",
+  "bin": {
+    "jambonz-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@jambonz/schema": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^5.2.1"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.3.0",
+    "eslint-plugin-promise": "^6.2.0",
+    "globals": "^15.3.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "zod": "^3.25.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

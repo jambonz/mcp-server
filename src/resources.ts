@@ -27,10 +27,10 @@ export function registerResources(server: McpServer): void {
     'agents-guide',
     'jambonz://docs/agents-guide',
     {
-      description: 'jambonz Agent Toolkit guide — explains the verb model, transport modes, core verbs, and common patterns',
+      description: 'jambonz guide — verb model, transport modes, core verbs, and common patterns',
       mimeType: 'text/markdown',
     },
-    async (uri) => ({
+    async(uri) => ({
       contents: [{
         uri: uri.href,
         text: readFileSync(agentsMdPath, 'utf-8'),
@@ -48,7 +48,7 @@ export function registerResources(server: McpServer): void {
       description: 'Root JSON Schema for a jambonz application — an array of verbs',
       mimeType: 'application/schema+json',
     },
-    async (uri) => ({
+    async(uri) => ({
       contents: [{
         uri: uri.href,
         text: readFileSync(appSchemaPath, 'utf-8'),
@@ -72,7 +72,7 @@ export function registerResources(server: McpServer): void {
         description: `JSON Schema for the "${verbName}" verb`,
         mimeType: 'application/schema+json',
       },
-      async (uri) => ({
+      async(uri) => ({
         contents: [{
           uri: uri.href,
           text: readFileSync(filePath, 'utf-8'),
@@ -97,7 +97,7 @@ export function registerResources(server: McpServer): void {
         description: `JSON Schema for the "${componentName}" component`,
         mimeType: 'application/schema+json',
       },
-      async (uri) => ({
+      async(uri) => ({
         contents: [{
           uri: uri.href,
           text: readFileSync(filePath, 'utf-8'),

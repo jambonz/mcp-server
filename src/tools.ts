@@ -80,9 +80,10 @@ export function registerTools(server: McpServer): void {
   // Tool 1: Guide + index (reads AGENTS.md fresh each call for development)
   server.tool(
     'jambonz_developer_toolkit',
-    'REQUIRED: You MUST call this tool before writing ANY jambonz code. Returns the complete jambonz developer guide covering: the @jambonz/sdk TypeScript SDK (WebhookResponse, WsSession, JambonzClient REST API, verb builder), verb model, webhook and WebSocket transports, actionHook payloads, mid-call control, recording, and working code examples. Also lists all available verb and component schemas.',
+    // eslint-disable-next-line max-len
+    'REQUIRED: call this before writing jambonz code. Returns the developer guide (verb model, transports, SDK API, patterns) and lists all available schemas.',
     {},
-    async () => ({
+    async() => ({
       content: [{
         type: 'text' as const,
         text: readFileSync(agentsMdPath, 'utf-8') + indexSuffix,
@@ -99,9 +100,13 @@ export function registerTools(server: McpServer): void {
   ];
   server.tool(
     'get_jambonz_schema',
-    `Get the full JSON Schema for a jambonz verb or component. Available: ${allNames.join(', ')}`,
-    { name: z.string().describe('The verb or component name (e.g. "say", "gather", "dial", "recognizer", "synthesizer")') },
-    async ({ name }) => {
+    `Get the JSON Schema for a jambonz verb or component. Available: ${allNames.join(', ')}`,
+    {
+      name: z.string().describe(
+        'Verb or component name (e.g. "say", "gather", "recognizer")'
+      ),
+    },
+    async({ name }) => {
       // Strip optional prefix (e.g. "verb:say" -> "say", "component:recognizer" -> "recognizer")
       const prefixMatch = name.match(/^(verb|component|callback|guide):(.*)/);
       const bare = prefixMatch ? prefixMatch[2] : name;
@@ -110,10 +115,12 @@ export function registerTools(server: McpServer): void {
       if (prefixMatch?.[1] === 'guide' && existsSync(guidesDir)) {
         const guidePath = resolve(guidesDir, `${bare}.md`);
         if (existsSync(guidePath)) {
-          return { content: [{ type: 'text' as const, text: readFileSync(guidePath, 'utf-8') }] };
+          const text = readFileSync(guidePath, 'utf-8');
+          return { content: [{ type: 'text' as const, text }] };
         }
+        const msg = `Unknown guide "${bare}". Available: ${guideNames.join(', ')}`;
         return {
-          content: [{ type: 'text' as const, text: `Unknown guide "${bare}". Available guides: ${guideNames.join(', ')}` }],
+          content: [{ type: 'text' as const, text: msg }],
           isError: true,
         };
       }

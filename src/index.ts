@@ -39,7 +39,7 @@ if (httpMode) {
   const app = express();
   app.use(express.json());
 
-  app.post('/mcp', async (req, res) => {
+  app.post('/mcp', async(req, res) => {
     const server = createServer();
     try {
       const transport = new StreamableHTTPServerTransport({

@@ -1,14 +1,15 @@
 /**
  * Registers MCP tools for jambonz schema and documentation access.
- * Resolves all content from the @jambonz/schema package.
+ * Resolves content from @jambonz/schema and @jambonz/sdk packages.
  *
- * Two tools:
+ * Three tools:
  *  1. jambonz_developer_toolkit — returns the full guide (AGENTS.md) plus
  *     a verb/component/callback/guide index.
  *  2. get_jambonz_schema — returns the full JSON Schema for a single verb,
  *     component, or callback on demand.  If a usage guide exists in docs/
  *     it is appended automatically.  Also supports guide:<name> for fetching
  *     in-depth markdown guides from docs/guides/.
+ *  3. get_sdk_example — returns the full source code for an SDK example.
  */
 
 import { readFileSync, readdirSync, existsSync } from 'fs';
@@ -23,6 +24,54 @@ const require = createRequire(import.meta.url);
 function getSchemaPackageDir(): string {
   const schemaIndex = require.resolve('@jambonz/schema');
   return resolve(schemaIndex, '..');
+}
+
+/** Locate the @jambonz/sdk package directory, returns null if not installed. */
+function getSdkPackageDir(): string | null {
+  try {
+    const sdkIndex = require.resolve('@jambonz/sdk');
+    const distDir = resolve(sdkIndex, '..');
+    const pkgRoot = resolve(distDir, '..');
+    if (existsSync(resolve(pkgRoot, 'AGENTS.md'))) return pkgRoot;
+    if (existsSync(resolve(distDir, 'AGENTS.md'))) return distDir;
+  } catch {
+    // SDK not installed
+  }
+  return null;
+}
+
+/** List example directories in the SDK. */
+function listSdkExamples(sdkDir: string): string[] {
+  const examplesDir = resolve(sdkDir, 'examples');
+  if (!existsSync(examplesDir)) return [];
+  return readdirSync(examplesDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
+}
+
+/** Read all source files from an example directory. */
+function readExampleFiles(exampleDir: string): { name: string; content: string }[] {
+  const files: { name: string; content: string }[] = [];
+  const entries = readdirSync(exampleDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = resolve(exampleDir, entry.name);
+    if (entry.isFile() && /\.(ts|js|json|md)$/.test(entry.name)) {
+      files.push({ name: entry.name, content: readFileSync(fullPath, 'utf-8') });
+    } else if (entry.isDirectory() && entry.name === 'src') {
+      // Recurse into src/ directory
+      const srcFiles = readdirSync(fullPath, { withFileTypes: true });
+      for (const srcEntry of srcFiles) {
+        if (srcEntry.isFile() && /\.(ts|js)$/.test(srcEntry.name)) {
+          files.push({
+            name: `src/${srcEntry.name}`,
+            content: readFileSync(resolve(fullPath, srcEntry.name), 'utf-8'),
+          });
+        }
+      }
+    }
+  }
+  return files;
 }
 
 /** List schema files in a directory, returning names without .schema.json suffix. */
@@ -57,6 +106,10 @@ export function registerTools(server: McpServer): void {
   const callbackNames = listSchemas(callbacksDir, ['base']);
   const guideNames = existsSync(guidesDir) ? listGuides(guidesDir) : [];
 
+  // SDK info (optional — only available if @jambonz/sdk is installed)
+  const sdkDir = getSdkPackageDir();
+  const sdkExampleNames = sdkDir ? listSdkExamples(sdkDir) : [];
+
   // Build the index suffix (static — names don't change at runtime)
   const indexParts = [
     '\n---\n',
@@ -70,11 +123,25 @@ export function registerTools(server: McpServer): void {
       `\n## Callbacks (actionHook payloads)\n${callbackNames.join(', ')}\n`
     );
   }
-  if (guideNames.length > 0) {
+
+  // Add guide:node-sdk to the list if SDK is available
+  const allGuideNames = [...guideNames];
+  if (sdkDir) {
+    allGuideNames.push('node-sdk');
+  }
+  if (allGuideNames.length > 0) {
     indexParts.push(
-      `\n## Guides\nIn-depth documentation on specific topics. Fetch with \`guide:<name>\`.\n${guideNames.join(', ')}\n`
+      `\n## Guides\nIn-depth documentation on specific topics. Fetch with \`guide:<name>\`.\n${allGuideNames.join(', ')}\n`
     );
   }
+
+  // Add SDK examples info
+  if (sdkExampleNames.length > 0) {
+    indexParts.push(
+      `\n## SDK Examples\nWorking code examples. Fetch with \`get_sdk_example\` tool.\n${sdkExampleNames.join(', ')}\n`
+    );
+  }
+
   const indexSuffix = indexParts.join('\n');
 
   // Tool 1: Guide + index (reads AGENTS.md fresh each call for development)
@@ -96,14 +163,14 @@ export function registerTools(server: McpServer): void {
     ...verbNames.map((n) => `verb:${n}`),
     ...componentNames.map((n) => `component:${n}`),
     ...callbackNames.map((n) => `callback:${n}`),
-    ...guideNames.map((n) => `guide:${n}`),
+    ...allGuideNames.map((n) => `guide:${n}`),
   ];
   server.tool(
     'get_jambonz_schema',
     `Get the JSON Schema for a jambonz verb or component. Available: ${allNames.join(', ')}`,
     {
       name: z.string().describe(
-        'Verb or component name (e.g. "say", "gather", "recognizer")'
+        'Verb or component name (e.g. "say", "gather", "recognizer", "guide:node-sdk")'
       ),
     },
     async({ name }) => {
@@ -112,13 +179,26 @@ export function registerTools(server: McpServer): void {
       const bare = prefixMatch ? prefixMatch[2] : name;
 
       // Guide lookup — guides are markdown files, not JSON schemas
-      if (prefixMatch?.[1] === 'guide' && existsSync(guidesDir)) {
-        const guidePath = resolve(guidesDir, `${bare}.md`);
-        if (existsSync(guidePath)) {
-          const text = readFileSync(guidePath, 'utf-8');
-          return { content: [{ type: 'text' as const, text }] };
+      if (prefixMatch?.[1] === 'guide') {
+        // Special case: node-sdk guide comes from @jambonz/sdk package
+        if (bare === 'node-sdk' && sdkDir) {
+          const sdkAgentsMdPath = resolve(sdkDir, 'AGENTS.md');
+          if (existsSync(sdkAgentsMdPath)) {
+            const text = readFileSync(sdkAgentsMdPath, 'utf-8');
+            return { content: [{ type: 'text' as const, text }] };
+          }
         }
-        const msg = `Unknown guide "${bare}". Available: ${guideNames.join(', ')}`;
+
+        // Regular guides from docs/guides/
+        if (existsSync(guidesDir)) {
+          const guidePath = resolve(guidesDir, `${bare}.md`);
+          if (existsSync(guidePath)) {
+            const text = readFileSync(guidePath, 'utf-8');
+            return { content: [{ type: 'text' as const, text }] };
+          }
+        }
+
+        const msg = `Unknown guide "${bare}". Available: ${allGuideNames.join(', ')}`;
         return {
           content: [{ type: 'text' as const, text: msg }],
           isError: true,
@@ -159,4 +239,53 @@ export function registerTools(server: McpServer): void {
       };
     },
   );
+
+  // Tool 3: SDK example lookup (only if SDK is installed)
+  if (sdkDir && sdkExampleNames.length > 0) {
+    server.tool(
+      'get_sdk_example',
+      `Get full source code for an SDK example. Available: ${sdkExampleNames.join(', ')}`,
+      {
+        name: z.string().describe(
+          `Example name (e.g. "echo", "hello-world", "voice-agent"). Available: ${sdkExampleNames.join(', ')}`
+        ),
+      },
+      async({ name }) => {
+        if (!sdkExampleNames.includes(name)) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Unknown example "${name}". Available: ${sdkExampleNames.join(', ')}`,
+            }],
+            isError: true,
+          };
+        }
+
+        const exampleDir = resolve(sdkDir, 'examples', name);
+        const files = readExampleFiles(exampleDir);
+
+        if (files.length === 0) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Example "${name}" exists but contains no source files.`,
+            }],
+            isError: true,
+          };
+        }
+
+        // Format output with file markers
+        const output = files.map((f) =>
+          `// === ${f.name} ===\n${f.content}`
+        ).join('\n\n');
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `# Example: ${name}\n\nFiles: ${files.map((f) => f.name).join(', ')}\n\n${output}`,
+          }],
+        };
+      },
+    );
+  }
 }

@@ -1,9 +1,9 @@
 /**
  * Registers jambonz schema files and documentation as MCP resources.
- * Resolves all content from the @jambonz/schema package.
+ * Resolves content from @jambonz/schema and @jambonz/sdk packages.
  */
 
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync, readdirSync, existsSync } from 'fs';
 import { resolve, basename } from 'path';
 import { createRequire } from 'module';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -15,6 +15,31 @@ function getSchemaPackageDir(): string {
   const schemaIndex = require.resolve('@jambonz/schema');
   // schemaIndex points to @jambonz/schema/index.js — parent dir is the package root
   return resolve(schemaIndex, '..');
+}
+
+/** Locate the @jambonz/sdk package directory, returns null if not installed. */
+function getSdkPackageDir(): string | null {
+  try {
+    const sdkIndex = require.resolve('@jambonz/sdk');
+    // sdkIndex points to dist/index.js — go up two levels for package root
+    const distDir = resolve(sdkIndex, '..');
+    const pkgRoot = resolve(distDir, '..');
+    if (existsSync(resolve(pkgRoot, 'AGENTS.md'))) return pkgRoot;
+    // Fallback: maybe it's one level up
+    if (existsSync(resolve(distDir, 'AGENTS.md'))) return distDir;
+  } catch {
+    // SDK not installed
+  }
+  return null;
+}
+
+/** List example directories in the SDK. */
+function listSdkExamples(sdkDir: string): string[] {
+  const examplesDir = resolve(sdkDir, 'examples');
+  if (!existsSync(examplesDir)) return [];
+  return readdirSync(examplesDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
 }
 
 export function registerResources(server: McpServer): void {
@@ -105,5 +130,51 @@ export function registerResources(server: McpServer): void {
         }],
       }),
     );
+  }
+
+  // 5. SDK documentation and examples (if @jambonz/sdk is installed)
+  const sdkDir = getSdkPackageDir();
+  if (sdkDir) {
+    const sdkAgentsMdPath = resolve(sdkDir, 'AGENTS.md');
+
+    // SDK guide resource
+    server.resource(
+      'sdk-node-guide',
+      'jambonz://sdk/node',
+      {
+        description: '@jambonz/sdk Node.js SDK guide — imports, createEndpoint, Session API, examples',
+        mimeType: 'text/markdown',
+      },
+      async(uri) => ({
+        contents: [{
+          uri: uri.href,
+          text: readFileSync(sdkAgentsMdPath, 'utf-8'),
+          mimeType: 'text/markdown',
+        }],
+      }),
+    );
+
+    // SDK examples index resource
+    const exampleNames = listSdkExamples(sdkDir);
+    if (exampleNames.length > 0) {
+      server.resource(
+        'sdk-examples-index',
+        'jambonz://sdk/examples',
+        {
+          description: 'Index of @jambonz/sdk code examples',
+          mimeType: 'application/json',
+        },
+        async(uri) => ({
+          contents: [{
+            uri: uri.href,
+            text: JSON.stringify({
+              examples: exampleNames,
+              description: 'Available SDK examples. Use get_sdk_example tool to fetch full source code.',
+            }, null, 2),
+            mimeType: 'application/json',
+          }],
+        }),
+      );
+    }
   }
 }

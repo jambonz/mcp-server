@@ -20,20 +20,51 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const require = createRequire(import.meta.url);
 
-/** Locate the @jambonz/schema package directory. */
-function getSchemaPackageDir(): string {
-  const schemaIndex = require.resolve('@jambonz/schema');
-  return resolve(schemaIndex, '..');
+interface SchemaInfo {
+  dir: string;
+  version: string;
 }
 
-/** Locate the @jambonz/sdk package directory, returns null if not installed. */
-function getSdkPackageDir(): string | null {
+/** Locate the @jambonz/schema package directory and version. */
+function getSchemaInfo(): SchemaInfo {
+  const schemaIndex = require.resolve('@jambonz/schema');
+  const dir = resolve(schemaIndex, '..');
+  const pkgJsonPath = resolve(dir, 'package.json');
+
+  let version = 'unknown';
+  if (existsSync(pkgJsonPath)) {
+    const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+    version = pkgJson.version || 'unknown';
+  }
+
+  return { dir, version };
+}
+
+interface SdkInfo {
+  dir: string;
+  version: string;
+}
+
+/** Locate the @jambonz/sdk package directory and version, returns null if not installed. */
+function getSdkInfo(): SdkInfo | null {
   try {
     const sdkIndex = require.resolve('@jambonz/sdk');
     const distDir = resolve(sdkIndex, '..');
     const pkgRoot = resolve(distDir, '..');
-    if (existsSync(resolve(pkgRoot, 'AGENTS.md'))) return pkgRoot;
-    if (existsSync(resolve(distDir, 'AGENTS.md'))) return distDir;
+
+    // Read version from package.json
+    let version = 'unknown';
+    const pkgJsonPath = resolve(pkgRoot, 'package.json');
+    if (existsSync(pkgJsonPath)) {
+      const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+      version = pkgJson.version || 'unknown';
+    }
+
+    if (existsSync(resolve(pkgRoot, 'AGENTS.md'))) return { dir: pkgRoot, version };
+    if (existsSync(resolve(distDir, 'AGENTS.md'))) return { dir: distDir, version };
+
+    // Even without AGENTS.md, return info if SDK is installed
+    return { dir: pkgRoot, version };
   } catch {
     // SDK not installed
   }
@@ -92,7 +123,9 @@ function listGuides(dir: string): string[] {
 }
 
 export function registerTools(server: McpServer): void {
-  const pkgDir = getSchemaPackageDir();
+  const schemaInfo = getSchemaInfo();
+  const pkgDir = schemaInfo.dir;
+  const schemaVersion = schemaInfo.version;
   const agentsMdPath = resolve(pkgDir, 'AGENTS.md');
   const docsDir = resolve(pkgDir, 'docs');
 
@@ -107,13 +140,18 @@ export function registerTools(server: McpServer): void {
   const guideNames = existsSync(guidesDir) ? listGuides(guidesDir) : [];
 
   // SDK info (optional — only available if @jambonz/sdk is installed)
-  const sdkDir = getSdkPackageDir();
+  const sdkInfo = getSdkInfo();
+  const sdkDir = sdkInfo?.dir ?? null;
+  const sdkVersion = sdkInfo?.version ?? null;
   const sdkExampleNames = sdkDir ? listSdkExamples(sdkDir) : [];
 
   // Build the index suffix (static — names don't change at runtime)
   const indexParts = [
     '\n---\n',
-    '# Available JSON Schemas\n',
+    '# Package Versions\n',
+    `**@jambonz/schema:** ${schemaVersion}`,
+    sdkVersion ? `\n**@jambonz/sdk:** ${sdkVersion}` : '',
+    '\n\n# Available JSON Schemas\n',
     'Use the get_jambonz_schema tool to fetch the full JSON Schema for any verb or component listed below.\n',
     `\n## Verbs\n${verbNames.join(', ')}\n`,
     `\n## Components\n${componentNames.join(', ')}\n`,
@@ -135,11 +173,16 @@ export function registerTools(server: McpServer): void {
     );
   }
 
-  // Add SDK examples info
-  if (sdkExampleNames.length > 0) {
+  // Add SDK info (version and examples)
+  if (sdkVersion) {
     indexParts.push(
-      `\n## SDK Examples\nWorking code examples. Fetch with \`get_sdk_example\` tool.\n${sdkExampleNames.join(', ')}\n`
+      `\n## Node SDK\n**Install:** \`npm install @jambonz/sdk@${sdkVersion}\`\n`
     );
+    if (sdkExampleNames.length > 0) {
+      indexParts.push(
+        `\n### SDK Examples\nWorking code examples. Fetch with \`get_sdk_example\` tool.\n${sdkExampleNames.join(', ')}\n`
+      );
+    }
   }
 
   const indexSuffix = indexParts.join('\n');

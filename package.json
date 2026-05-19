@@ -1,6 +1,6 @@
 {
   "name": "@jambonz/mcp-schema-server",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "MCP server that provides jambonz verb schemas and documentation to AI agents",
   "author": "Dave Horton",
   "license": "MIT",
@@ -34,8 +34,8 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@jambonz/schema": "^0.3.7",
-    "@jambonz/sdk": "^0.4.1",
+    "@jambonz/schema": "^0.3.8",
+    "@jambonz/sdk": "^0.4.2",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "express": "^5.2.1"
   },

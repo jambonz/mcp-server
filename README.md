@@ -95,6 +95,33 @@ To use the remote server in `.mcp.json`:
 }
 ```
 
+## Development
+
+### Local Testing
+
+```bash
+npm install
+npm run build
+node dist/index.js              # stdio transport
+node dist/index.js --http       # HTTP on port 3000
+```
+
+### Release Process
+
+Publishing is handled by GitHub Actions on `v*` tags. To release:
+
+```bash
+# After updating dependencies in package.json
+npm install
+git add -A && git commit -m "chore: update dependencies"
+
+# Bump version and create tag
+npm version patch   # or minor/major
+
+# Push commit and tag to trigger publish workflow
+git push origin main --tags
+```
+
 ## Links
 
 - [@jambonz/schema](https://github.com/jambonz/schema) -- schema package this server exposes

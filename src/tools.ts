@@ -105,6 +105,42 @@ function readExampleFiles(exampleDir: string): { name: string; content: string }
   return files;
 }
 
+interface PrebuiltTool {
+  name: string;
+  description: string;
+  factory: string;
+  requiresApiKey: boolean;
+  parameters: unknown;
+}
+
+interface ToolsInfo {
+  version: string;
+  tools: PrebuiltTool[];
+}
+
+/**
+ * Locate @jambonz/tools and read its tool catalog via the package's own
+ * `listTools()`. Returns null if the package isn't installed. The list is
+ * version-accurate and auto-tracks whatever version is installed — no list is
+ * hardcoded here.
+ */
+function getToolsInfo(): ToolsInfo | null {
+  try {
+    const idx = require.resolve('@jambonz/tools');
+    const pkgRoot = resolve(idx, '..', '..');
+    let version = 'unknown';
+    const pkgJsonPath = resolve(pkgRoot, 'package.json');
+    if (existsSync(pkgJsonPath)) {
+      version = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')).version || 'unknown';
+    }
+    const mod = require('@jambonz/tools') as { listTools?: () => PrebuiltTool[] };
+    if (typeof mod.listTools !== 'function') return null;
+    return { version, tools: mod.listTools() };
+  } catch {
+    return null;
+  }
+}
+
 /** List schema files in a directory, returning names without .schema.json suffix. */
 function listSchemas(dir: string, exclude: string[] = []): string[] {
   if (!existsSync(dir)) return [];
@@ -145,6 +181,9 @@ export function registerTools(server: McpServer): void {
   const sdkVersion = sdkInfo?.version ?? null;
   const sdkExampleNames = sdkDir ? listSdkExamples(sdkDir) : [];
 
+  // Pre-built tools (optional — only available if @jambonz/tools is installed)
+  const toolsInfo = getToolsInfo();
+
   // Build the index suffix (static — names don't change at runtime)
   const indexParts = [
     '\n---\n',
@@ -169,7 +208,8 @@ export function registerTools(server: McpServer): void {
   }
   if (allGuideNames.length > 0) {
     indexParts.push(
-      `\n## Guides\nIn-depth documentation on specific topics. Fetch with \`guide:<name>\`.\n${allGuideNames.join(', ')}\n`
+      '\n## Guides\nIn-depth documentation on specific topics. '
+        + `Fetch with \`guide:<name>\`.\n${allGuideNames.join(', ')}\n`
     );
   }
 
@@ -180,9 +220,34 @@ export function registerTools(server: McpServer): void {
     );
     if (sdkExampleNames.length > 0) {
       indexParts.push(
-        `\n### SDK Examples\nWorking code examples. Fetch with \`get_sdk_example\` tool.\n${sdkExampleNames.join(', ')}\n`
+        '\n### SDK Examples\nWorking code examples. '
+          + `Fetch with \`get_sdk_example\` tool.\n${sdkExampleNames.join(', ')}\n`
       );
     }
+  }
+
+  // Pre-built tools — surface @jambonz/tools so agents use ready-made tools
+  // instead of hand-rolling toolHook handlers. The list is read from the
+  // installed package, so it tracks the package version automatically.
+  if (toolsInfo && toolsInfo.tools.length > 0) {
+    const toolLines = toolsInfo.tools
+      .map(
+        (t) =>
+          `- \`${t.name}\` — ${t.description} ` +
+          `(import \`{ ${t.factory} }\`${t.requiresApiKey ? ', requires API key' : ', no API key'})`
+      )
+      .join('\n');
+    indexParts.push(
+      `\n# Pre-built Agent Tools (@jambonz/tools v${toolsInfo.version})\n`,
+      '**Install:** `npm install @jambonz/tools`\n',
+      'When building an `agent`/s2s app that needs a tool (web search, weather, ' +
+        'knowledge lookup, math, date/time, etc.), FIRST check whether one of these ' +
+        'pre-built tools fits — do NOT hand-roll a `toolHook` handler for something ' +
+        'already provided. To use one: import the `factory`, pass its `.schema` to ' +
+        '`llmOptions.tools`, and wire dispatch with `registerTools(session, hookPath, [tool])`. ' +
+        'Call the `list_jambonz_tools` tool for full parameter schemas.\n',
+      toolLines + '\n'
+    );
   }
 
   const indexSuffix = indexParts.join('\n');
@@ -329,6 +394,34 @@ export function registerTools(server: McpServer): void {
           }],
         };
       },
+    );
+  }
+
+  // Tool 4: Pre-built tool catalog (only if @jambonz/tools is installed)
+  if (toolsInfo && toolsInfo.tools.length > 0) {
+    const toolNames = toolsInfo.tools.map((t) => t.name).join(', ');
+    server.tool(
+      'list_jambonz_tools',
+      // eslint-disable-next-line max-len
+      `List the pre-built tools from @jambonz/tools (v${toolsInfo.version}) for jambonz agent apps, with full parameter schemas. Check here BEFORE hand-rolling a toolHook handler — use a ready-made tool if one fits. Available: ${toolNames}.`,
+      {},
+      async() => ({
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(
+            {
+              package: '@jambonz/tools',
+              version: toolsInfo.version,
+              install: 'npm install @jambonz/tools',
+              usage: 'Import the named factory, pass its .schema to llmOptions.tools, '
+                + 'and wire dispatch with registerTools(session, hookPath, [tool]).',
+              tools: toolsInfo.tools,
+            },
+            null,
+            2,
+          ),
+        }],
+      }),
     );
   }
 }

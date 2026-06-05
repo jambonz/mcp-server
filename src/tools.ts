@@ -208,7 +208,8 @@ export function registerTools(server: McpServer): void {
   }
   if (allGuideNames.length > 0) {
     indexParts.push(
-      `\n## Guides\nIn-depth documentation on specific topics. Fetch with \`guide:<name>\`.\n${allGuideNames.join(', ')}\n`
+      '\n## Guides\nIn-depth documentation on specific topics. '
+        + `Fetch with \`guide:<name>\`.\n${allGuideNames.join(', ')}\n`
     );
   }
 
@@ -219,7 +220,8 @@ export function registerTools(server: McpServer): void {
     );
     if (sdkExampleNames.length > 0) {
       indexParts.push(
-        `\n### SDK Examples\nWorking code examples. Fetch with \`get_sdk_example\` tool.\n${sdkExampleNames.join(', ')}\n`
+        '\n### SDK Examples\nWorking code examples. '
+          + `Fetch with \`get_sdk_example\` tool.\n${sdkExampleNames.join(', ')}\n`
       );
     }
   }

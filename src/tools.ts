@@ -190,7 +190,12 @@ export function registerTools(server: McpServer): void {
     '# Package Versions\n',
     `**@jambonz/schema:** ${schemaVersion}`,
     sdkVersion ? `\n**@jambonz/sdk:** ${sdkVersion}` : '',
-    '\n\n# Available JSON Schemas\n',
+    toolsInfo ? `\n**@jambonz/tools:** ${toolsInfo.version}` : '',
+    toolsInfo
+      ? '\n\n> **Note:** Pre-built agent tools are available (weather, web search, calculator, etc.). '
+        + 'See the **Pre-built Agent Tools** section below before implementing custom `toolHook` handlers.\n'
+      : '',
+    '\n# Available JSON Schemas\n',
     'Use the get_jambonz_schema tool to fetch the full JSON Schema for any verb or component listed below.\n',
     `\n## Verbs\n${verbNames.join(', ')}\n`,
     `\n## Components\n${componentNames.join(', ')}\n`,
@@ -256,7 +261,7 @@ export function registerTools(server: McpServer): void {
   server.tool(
     'jambonz_developer_toolkit',
     // eslint-disable-next-line max-len
-    'REQUIRED: call this before writing jambonz code. Returns the developer guide (verb model, transports, SDK API, patterns) and lists all available schemas.',
+    'REQUIRED: call this before writing jambonz code. Returns the developer guide (verb model, transports, SDK API, patterns), lists all available schemas, and shows pre-built agent tools (weather, search, calculator, etc.) — check these before implementing custom toolHook handlers.',
     {},
     async() => ({
       content: [{

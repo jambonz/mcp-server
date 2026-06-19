@@ -33,13 +33,21 @@ function getSdkPackageDir(): string | null {
   return null;
 }
 
-/** List example directories in the SDK. */
+/**
+ * List SDK examples — directory examples (e.g. `room-with-stream/`) and
+ * single-file examples (e.g. `bedrock-agent.ts`, surfaced under its basename).
+ */
 function listSdkExamples(sdkDir: string): string[] {
   const examplesDir = resolve(sdkDir, 'examples');
   if (!existsSync(examplesDir)) return [];
-  return readdirSync(examplesDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name);
+  const names = new Set<string>();
+  for (const entry of readdirSync(examplesDir, { withFileTypes: true })) {
+    if (entry.isDirectory()) names.add(entry.name);
+    else if (entry.isFile() && /\.(ts|js)$/.test(entry.name)) {
+      names.add(entry.name.replace(/\.(ts|js)$/, ''));
+    }
+  }
+  return [...names].sort();
 }
 
 export function registerResources(server: McpServer): void {

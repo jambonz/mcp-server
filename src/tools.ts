@@ -12,7 +12,7 @@
  *  3. get_sdk_example — returns the full source code for an SDK example.
  */
 
-import { readFileSync, readdirSync, existsSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { resolve, basename } from 'path';
 import { createRequire } from 'module';
 import { z } from 'zod';
@@ -71,13 +71,38 @@ function getSdkInfo(): SdkInfo | null {
   return null;
 }
 
-/** List example directories in the SDK. */
+/**
+ * List SDK examples. An example is either a directory (e.g. `room-with-stream/`)
+ * or a single top-level source file (e.g. `bedrock-agent.ts`); the latter is
+ * surfaced under its basename without the extension.
+ */
 function listSdkExamples(sdkDir: string): string[] {
   const examplesDir = resolve(sdkDir, 'examples');
   if (!existsSync(examplesDir)) return [];
-  return readdirSync(examplesDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name);
+  const names = new Set<string>();
+  for (const entry of readdirSync(examplesDir, { withFileTypes: true })) {
+    if (entry.isDirectory()) names.add(entry.name);
+    else if (entry.isFile() && /\.(ts|js)$/.test(entry.name)) {
+      names.add(entry.name.replace(/\.(ts|js)$/, ''));
+    }
+  }
+  return [...names].sort();
+}
+
+/**
+ * Resolve an example name to its source files, whether it's a directory example
+ * or a single top-level `<name>.ts`/`.js` file. Returns [] if it can't be found.
+ */
+function readSdkExample(examplesDir: string, name: string): { name: string; content: string }[] {
+  const asDir = resolve(examplesDir, name);
+  if (existsSync(asDir) && statSync(asDir).isDirectory()) return readExampleFiles(asDir);
+  for (const ext of ['ts', 'js'] as const) {
+    const flat = resolve(examplesDir, `${name}.${ext}`);
+    if (existsSync(flat) && statSync(flat).isFile()) {
+      return [{ name: `${name}.${ext}`, content: readFileSync(flat, 'utf-8') }];
+    }
+  }
+  return [];
 }
 
 /** Read all source files from an example directory. */
@@ -374,8 +399,7 @@ export function registerTools(server: McpServer): void {
           };
         }
 
-        const exampleDir = resolve(sdkDir, 'examples', name);
-        const files = readExampleFiles(exampleDir);
+        const files = readSdkExample(resolve(sdkDir, 'examples'), name);
 
         if (files.length === 0) {
           return {

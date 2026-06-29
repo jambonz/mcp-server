@@ -34,7 +34,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@jambonz/schema": "^0.3.15",
+    "@jambonz/schema": "^0.3.18",
     "@jambonz/sdk": "^0.8.0",
     "@jambonz/tools": "^0.1.4",
     "@modelcontextprotocol/sdk": "^1.12.0",

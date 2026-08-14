@@ -15,13 +15,30 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
+import { createRequire } from 'module';
 import { registerResources } from './resources.js';
 import { registerTools } from './tools.js';
+
+const require = createRequire(import.meta.url);
+
+/**
+ * Our own version, reported to MCP clients as serverInfo.version. Read from
+ * package.json rather than hardcoded so a deployed instance always identifies
+ * the release it is actually running.
+ */
+function getServerVersion(): string {
+  try {
+    // dist/index.js -> ../package.json; npm always ships package.json in the tarball
+    return require('../package.json').version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 function createServer(): McpServer {
   const server = new McpServer({
     name: 'jambonz-schema-server',
-    version: '0.2.0',
+    version: getServerVersion(),
   });
   registerResources(server);
   registerTools(server);
